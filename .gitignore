@@ -174,3 +174,4 @@ uv.lock
 *.pdf
 *.docx
 CLAUDE.md
+webui/node_modules/
