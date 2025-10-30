@@ -2,10 +2,8 @@ import axios from 'axios';
 import type { TaskDetail, TaskSummary } from '@/types/task';
 import type { AuthResponse, UserProfile } from '@/types/user';
 
-const baseURL =
-  import.meta.env.VITE_API_BASE_URL ||
-  import.meta.env.VITE_API_BASE ||
-  '/api';
+// Use same-origin path for dev; real backend is configured via Vite proxy target
+const baseURL = import.meta.env.VITE_API_BASE || '/api';
 
 export const apiClient = axios.create({
   baseURL,

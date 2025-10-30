@@ -155,7 +155,7 @@ class PDFSettings(BaseModel):
         default=False, description="Use alternating pages mode for dual PDF"
     )
     watermark_output_mode: str = Field(
-        default="watermarked",
+        default="no_watermark",
         description="Watermark output mode for PDF files (watermarked, no_watermark, or both)",
     )
     max_pages_per_part: int | None = Field(
@@ -198,6 +198,11 @@ class PDFSettings(BaseModel):
     skip_formula_offset_calculation: bool = Field(
         default=False,
         description="Skip formula offset calculation during processing",
+    )
+
+    linearize_output: bool = Field(
+        default=True,
+        description="Linearize output PDFs for fast web view (if tools available)",
     )
 
 

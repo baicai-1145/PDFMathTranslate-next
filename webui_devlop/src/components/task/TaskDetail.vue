@@ -171,10 +171,10 @@ const monoViewer = ref<InstanceType<typeof PdfViewer> | null>(null);
 const monoViewerDual = ref<InstanceType<typeof PdfViewer> | null>(null);
 const originalViewer = ref<InstanceType<typeof PdfViewer> | null>(null);
 const isSyncing = ref(false);
-let monoScroller: HTMLElement | null = null; // primary observed container (fallback)
-let originalScroller: HTMLElement | null = null; // primary observed container (fallback)
-let monoInnerScroller: HTMLElement | null = null; // inner .pdf-scroller if present
-let originalInnerScroller: HTMLElement | null = null; // inner .pdf-scroller if present
+let monoScroller: HTMLElement | null = null;
+let originalScroller: HTMLElement | null = null;
+let monoInnerScroller: HTMLElement | null = null;
+let originalInnerScroller: HTMLElement | null = null;
 let attachRetryTimer: number | null = null;
 let attachRetryCount = 0;
 
@@ -400,8 +400,8 @@ function resolveContainers(componentRef: any): { outer: HTMLElement | null; inne
 function handleMonoScroll(evt?: Event) {
   if (previewMode.value !== 'dual') return;
   const source = (evt?.currentTarget as HTMLElement) || monoScroller || monoInnerScroller;
-  const targetCandidateA = (source === monoInnerScroller ? originalInnerScroller : originalScroller);
-  const targetCandidateB = (source === monoScroller ? originalScroller : originalInnerScroller);
+  const targetCandidateA = source === monoInnerScroller ? originalInnerScroller : originalScroller;
+  const targetCandidateB = source === monoScroller ? originalScroller : originalInnerScroller;
   const target = targetCandidateA || targetCandidateB;
   if (source && target) {
     syncScroll(source, target);
@@ -412,8 +412,8 @@ function handleMonoScroll(evt?: Event) {
 function handleOriginalScroll(evt?: Event) {
   if (previewMode.value !== 'dual') return;
   const source = (evt?.currentTarget as HTMLElement) || originalScroller || originalInnerScroller;
-  const targetCandidateA = (source === originalInnerScroller ? monoInnerScroller : monoScroller);
-  const targetCandidateB = (source === originalScroller ? monoScroller : monoInnerScroller);
+  const targetCandidateA = source === originalInnerScroller ? monoInnerScroller : monoScroller;
+  const targetCandidateB = source === originalScroller ? monoScroller : monoInnerScroller;
   const target = targetCandidateA || targetCandidateB;
   if (source && target) {
     syncScroll(source, target);
@@ -435,7 +435,6 @@ function attachSync() {
     monoInnerScroller = monoBoth.inner;
     originalInnerScroller = origBoth.inner;
     if (!(monoScroller || monoInnerScroller) || !(originalScroller || originalInnerScroller)) return false;
-    // Bind to both outer and inner to capture whichever actually scrolls
     monoScroller && monoScroller.addEventListener('scroll', handleMonoScroll, { passive: true });
     monoInnerScroller && monoInnerScroller.addEventListener('scroll', handleMonoScroll, { passive: true });
     originalScroller && originalScroller.addEventListener('scroll', handleOriginalScroll, { passive: true });

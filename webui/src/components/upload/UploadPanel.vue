@@ -50,22 +50,85 @@
       </label>
     </div>
 
-    <button class="btn-secondary advanced-toggle" @click="toggleAdvanced">
+    <button v-if="!lockProvider" class="btn-secondary advanced-toggle" @click="toggleAdvanced">
       {{ t('upload.advanced') }} {{ showAdvanced ? '▾' : '▸' }}
     </button>
 
     <transition name="fade">
-      <div v-if="showAdvanced" class="advanced card">
+      <div v-if="showAdvanced && !lockProvider" class="advanced card">
         <h4>{{ t('upload.serviceTitle') }}</h4>
+
         <label class="field">
-          <span>SiliconFlow</span>
+          <span>{{ t('upload.serviceSelect') }}</span>
+          <select v-model="form.service">
+            <option value="default">{{ t('upload.serviceDefault') }}</option>
+            <option value="siliconflow">{{ t('upload.serviceSiliconflow') }}</option>
+            <option value="deepseek">{{ t('upload.serviceDeepseek') }}</option>
+            <option value="openaicompatible">{{ t('upload.serviceOpenAICompatible') }}</option>
+          </select>
+        </label>
+
+        <label v-if="form.service === 'siliconflow'" class="field">
+          <span>{{ t('upload.siliconflowKey') }}</span>
           <input
             v-model="form.siliconflowKey"
-            :placeholder="t('upload.siliconflowKey')"
             type="password"
             autocomplete="off"
+            :placeholder="t('upload.siliconflowKey')"
           />
         </label>
+
+        <div v-else-if="form.service === 'deepseek'" class="field-group">
+          <label class="field">
+            <span>{{ t('upload.deepseekKey') }}</span>
+            <input
+              v-model="form.deepseekKey"
+              type="password"
+              autocomplete="off"
+              :placeholder="t('upload.deepseekKey')"
+            />
+          </label>
+          <label class="field">
+            <span>{{ t('upload.deepseekModel') }}</span>
+            <input
+              v-model="form.deepseekModel"
+              type="text"
+              autocomplete="off"
+              placeholder="deepseek-chat"
+            />
+          </label>
+        </div>
+
+        <div v-else-if="form.service === 'openaicompatible'" class="field-group">
+          <label class="field">
+            <span>{{ t('upload.openaiCompatibleBaseUrl') }}</span>
+            <input
+              v-model="form.openaiCompatibleBaseUrl"
+              type="text"
+              autocomplete="off"
+              :placeholder="t('upload.openaiCompatibleBaseUrl')"
+            />
+          </label>
+          <label class="field">
+            <span>{{ t('upload.openaiCompatibleApiKey') }}</span>
+            <input
+              v-model="form.openaiCompatibleApiKey"
+              type="password"
+              autocomplete="off"
+              :placeholder="t('upload.openaiCompatibleApiKey')"
+            />
+          </label>
+          <label class="field">
+            <span>{{ t('upload.openaiCompatibleModel') }}</span>
+            <input
+              v-model="form.openaiCompatibleModel"
+              type="text"
+              autocomplete="off"
+              placeholder="gpt-4o-mini"
+            />
+          </label>
+        </div>
+
         <label class="field checkbox">
           <input v-model="form.remember" type="checkbox" />
           <span>{{ t('upload.rememberConfig') }}</span>
@@ -81,39 +144,84 @@
       <span v-if="taskStore.uploading">...</span>
       <span v-else>{{ t('upload.start') }}</span>
     </button>
+    <p class="login-hint">
+      {{ authStore.isLoggedIn ? t('upload.loggedInNote') : t('upload.guestNote') }}
+    </p>
   </section>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, computed } from 'vue';
 import { useTaskStore } from '@/stores/task';
 import { useI18n } from '@/i18n';
+import { useAuthStore } from '@/stores/auth';
 
 const { t } = useI18n();
 const taskStore = useTaskStore();
+const authStore = useAuthStore();
 
 const fileInput = ref<HTMLInputElement | null>(null);
 const selectedFile = ref<File | null>(null);
 const showAdvanced = ref(false);
-const username = 'visitor';
+const username = computed(() => authStore.displayName ?? t('auth.guest'));
 
 const STORAGE_KEY = 'pdfmathtranslate-upload-config';
+const DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat';
+type ServiceOption = 'default' | 'siliconflow' | 'deepseek' | 'openaicompatible';
 
 const form = reactive({
   langFrom: 'en',
   langTo: 'zh',
+  service: 'default' as ServiceOption,
   siliconflowKey: '',
+  deepseekKey: '',
+  deepseekModel: DEFAULT_DEEPSEEK_MODEL,
+  openaiCompatibleBaseUrl: '',
+  openaiCompatibleApiKey: '',
+  openaiCompatibleModel: 'gpt-4o-mini',
   remember: false
 });
 
+// Env-based lock mode
+const ENV_PROVIDER = String((import.meta.env as any).VITE_PROVIDER || '').toLowerCase();
+const ENV_SF_KEY = String((import.meta.env as any).VITE_SILICONFLOW_API_KEY || '');
+const ENV_DS_KEY = String((import.meta.env as any).VITE_DEEPSEEK_API_KEY || '');
+const ENV_DS_MODEL = String((import.meta.env as any).VITE_DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL);
+const ENV_OC_BASE = String((import.meta.env as any).VITE_OPENAI_COMPAT_BASE_URL || '');
+const ENV_OC_KEY = String((import.meta.env as any).VITE_OPENAI_COMPAT_API_KEY || '');
+const ENV_OC_MODEL = String((import.meta.env as any).VITE_OPENAI_COMPAT_MODEL || 'gpt-4o-mini');
+
+function toBool(value: unknown) {
+  const s = String(value ?? '').trim().toLowerCase();
+  return s === 'true' || s === '1' || s === 'yes' || s === 'on';
+}
+
+const lockProvider =
+  toBool((import.meta.env as any).VITE_LOCK_PROVIDER) ||
+  Boolean(
+    ENV_PROVIDER ||
+      ENV_OC_BASE ||
+      ENV_OC_KEY ||
+      ENV_OC_MODEL ||
+      ENV_DS_KEY ||
+      ENV_SF_KEY
+  );
+
 onMounted(() => {
+  void authStore.initialize();
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
       form.langFrom = parsed.langFrom ?? form.langFrom;
       form.langTo = parsed.langTo ?? form.langTo;
+      form.service = parsed.service ?? form.service;
       form.siliconflowKey = parsed.siliconflowKey ?? '';
+      form.deepseekKey = parsed.deepseekKey ?? '';
+      form.deepseekModel = parsed.deepseekModel ?? form.deepseekModel;
+      form.openaiCompatibleBaseUrl = parsed.openaiCompatibleBaseUrl ?? '';
+      form.openaiCompatibleApiKey = parsed.openaiCompatibleApiKey ?? '';
+      form.openaiCompatibleModel = parsed.openaiCompatibleModel ?? form.openaiCompatibleModel;
       form.remember = Boolean(parsed.remember);
     }
   } catch (error) {
@@ -152,20 +260,74 @@ async function submit() {
     }
   };
 
-  if (form.siliconflowKey.trim()) {
+  // Determine service (locked by env or user selection)
+  const service: ServiceOption = lockProvider
+    ? ((['siliconflow', 'deepseek', 'openaicompatible'] as const).includes(
+        ENV_PROVIDER as any
+      )
+        ? (ENV_PROVIDER as ServiceOption)
+        : 'openaicompatible')
+    : form.service;
+
+  if (service === 'siliconflow') {
+    const key = lockProvider ? ENV_SF_KEY.trim() : form.siliconflowKey.trim();
+    if (!key) {
+      taskStore.setMessage(t('upload.error.siliconflowKeyMissing'), 'error');
+      return;
+    }
     payload.siliconflow = true;
     payload.siliconflow_detail = {
-      siliconflow_api_key: form.siliconflowKey.trim()
+      siliconflow_api_key: key
+    };
+  } else if (service === 'deepseek') {
+    const key = lockProvider ? ENV_DS_KEY.trim() : form.deepseekKey.trim();
+    if (!key) {
+      taskStore.setMessage(t('upload.error.deepseekKeyMissing'), 'error');
+      return;
+    }
+    const model = (lockProvider ? ENV_DS_MODEL : form.deepseekModel).trim() || DEFAULT_DEEPSEEK_MODEL;
+    payload.deepseek = true;
+    payload.deepseek_detail = {
+      deepseek_api_key: key,
+      deepseek_model: model
+    };
+  } else if (service === 'openaicompatible') {
+    const baseUrl = (lockProvider ? ENV_OC_BASE : form.openaiCompatibleBaseUrl).trim();
+    const apiKey = (lockProvider ? ENV_OC_KEY : form.openaiCompatibleApiKey).trim();
+    const model = (lockProvider ? ENV_OC_MODEL : form.openaiCompatibleModel).trim() || 'gpt-4o-mini';
+    if (!baseUrl) {
+      taskStore.setMessage(t('upload.error.openaiCompatibleBaseUrlMissing'), 'error');
+      return;
+    }
+    if (!apiKey) {
+      taskStore.setMessage(t('upload.error.openaiCompatibleApiKeyMissing'), 'error');
+      return;
+    }
+    if (!model) {
+      taskStore.setMessage(t('upload.error.openaiCompatibleModelMissing'), 'error');
+      return;
+    }
+    payload.openaicompatible = true;
+    payload.openaicompatible_detail = {
+      openai_compatible_base_url: baseUrl,
+      openai_compatible_api_key: apiKey,
+      openai_compatible_model: model
     };
   }
 
   try {
     await taskStore.submitTask(selectedFile.value, payload);
-    if (form.remember) {
+    if (!lockProvider && form.remember) {
       const snapshot = {
         langFrom: form.langFrom,
         langTo: form.langTo,
+        service: form.service,
         siliconflowKey: form.siliconflowKey,
+        deepseekKey: form.deepseekKey,
+        deepseekModel: form.deepseekModel,
+        openaiCompatibleBaseUrl: form.openaiCompatibleBaseUrl,
+        openaiCompatibleApiKey: form.openaiCompatibleApiKey,
+        openaiCompatibleModel: form.openaiCompatibleModel,
         remember: true
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -204,6 +366,18 @@ async function submit() {
 .highlight {
   color: var(--accent);
   font-weight: 600;
+}
+
+.login-hint {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.login-hint {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 
 .dropzone {
@@ -251,6 +425,12 @@ async function submit() {
   background: var(--surface-elevated);
   color: var(--text-primary);
   font-family: inherit;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .field.checkbox {
