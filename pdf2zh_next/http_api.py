@@ -552,6 +552,74 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
+# Prefer GPU for onnxruntime sessions and enable parallel execution (best-effort)
+def _patch_onnxruntime_gpu_parallel() -> None:
+    try:
+        import onnxruntime as ort  # type: ignore
+    except Exception:
+        logger.debug("onnxruntime not installed; skip ORT patch")
+        return
+
+    # Default: disable thread affinity to avoid cpuset warnings if not explicitly set
+    os.environ.setdefault("ORT_DISABLE_THREAD_AFFINITY", "1")
+
+    available = []
+    try:
+        available = list(ort.get_available_providers())  # type: ignore[attr-defined]
+    except Exception:
+        logger.debug("cannot query ORT providers; proceed with patch")
+
+    preferred: list[str] = []
+    if "TensorrtExecutionProvider" in available:
+        preferred.append("TensorrtExecutionProvider")
+    if "CUDAExecutionProvider" in available:
+        preferred.append("CUDAExecutionProvider")
+    # Always keep CPU as fallback
+    preferred.append("CPUExecutionProvider")
+
+    OriginalSession = ort.InferenceSession  # type: ignore[attr-defined]
+
+    def _default_sess_options(existing=None):
+        try:
+            so = existing or ort.SessionOptions()  # type: ignore[attr-defined]
+            # Parallel graph execution when possible
+            try:
+                so.execution_mode = getattr(ort, "ExecutionMode").ORT_PARALLEL  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            intra = int(os.getenv("P2Z_ORT_INTRA_OP", "0") or "0")
+            inter = int(os.getenv("P2Z_ORT_INTER_OP", "0") or "0")
+            if intra > 0:
+                so.intra_op_num_threads = intra
+            if inter > 0:
+                so.inter_op_num_threads = inter
+            return so
+        except Exception:
+            return existing
+
+    def PatchedInferenceSession(*args, providers=None, sess_options=None, **kwargs):  # type: ignore[no-redef]
+        try:
+            use_providers = providers or preferred
+            so = _default_sess_options(sess_options)
+            return OriginalSession(*args, providers=use_providers, sess_options=so, **kwargs)
+        except Exception:
+            # Fallback to original behavior on any incompatibility
+            return OriginalSession(*args, providers=providers, sess_options=sess_options, **kwargs)
+
+    try:
+        ort.InferenceSession = PatchedInferenceSession  # type: ignore[assignment]
+        logger.info(
+            "onnxruntime patched: preferred providers=%s, intra=%s, inter=%s",
+            preferred,
+            os.getenv("P2Z_ORT_INTRA_OP", "0"),
+            os.getenv("P2Z_ORT_INTER_OP", "0"),
+        )
+    except Exception:
+        logger.debug("failed to patch onnxruntime", exc_info=True)
+
+
+_patch_onnxruntime_gpu_parallel()
+
 
 # Optional linearization (Fast Web View) helpers
 def _try_linearize_pdf(path: Path) -> None:

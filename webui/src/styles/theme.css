@@ -6,6 +6,7 @@
   --text-secondary: #1f2937;
   --text-muted: #64748b;
   --accent: #0f172a;
+  --accent-text: #ffffff;
   --border-muted: #e2e8f0;
   --border-strong: #cbd5f5;
   color-scheme: light;
@@ -14,17 +15,65 @@
 }
 
 :root[data-theme='dark'] {
-  --surface-primary: #0f172a;
-  --surface-muted: rgba(30, 41, 59, 0.65);
-  --surface-elevated: rgba(15, 23, 42, 0.88);
-  --text-primary: #f8fafc;
-  --text-secondary: #e2e8f0;
-  --text-muted: #94a3b8;
-  --accent: #93c5fd;
-  --border-muted: rgba(148, 163, 184, 0.4);
-  --border-strong: rgba(148, 163, 184, 0.6);
+  /* Pure black/white themed dark mode */
+  --surface-primary: #000000;
+  --surface-muted: rgba(255, 255, 255, 0.06);
+  --surface-elevated: rgba(20, 20, 20, 0.95);
+  --text-primary: #ffffff;
+  --text-secondary: #e5e7eb;
+  --text-muted: #a3a3a3;
+  --accent: #000000; /* primary buttons use black background */
+  --accent-text: #ffffff;
+  --border-muted: rgba(255, 255, 255, 0.2);
+  --border-strong: rgba(255, 255, 255, 0.35);
   color-scheme: dark;
   background-color: var(--surface-primary);
+}
+
+/* Dark theme button overrides: pure black/white */
+:root[data-theme='dark'] .btn-primary {
+  background: #000000;
+  color: #ffffff;
+  box-shadow: 0 16px 32px rgba(255, 255, 255, 0.06);
+}
+
+:root[data-theme='dark'] .btn-primary:hover {
+  background: #111111;
+}
+
+:root[data-theme='dark'] .btn-secondary {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+}
+
+:root[data-theme='dark'] .btn-secondary:hover {
+  background: #000000;
+  color: #ffffff;
+  border-color: #ffffff;
+}
+
+/* Top bar specific buttons in dark mode */
+:root[data-theme='dark'] .top-bar .accent {
+  background: #000000;
+  color: #ffffff;
+  border: 1px solid #ffffff00;
+}
+
+:root[data-theme='dark'] .top-bar .accent:hover {
+  background: #111111;
+}
+
+:root[data-theme='dark'] .top-bar .ghost {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+}
+
+:root[data-theme='dark'] .top-bar .ghost:hover {
+  background: #000000;
+  color: #ffffff;
+  border-color: #ffffff;
 }
 
 body {
