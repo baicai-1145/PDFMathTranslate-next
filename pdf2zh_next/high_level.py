@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from pdf2zh_next.ort_patch import patch_onnxruntime_for_gpu_parallel
 import logging.handlers
 import multiprocessing
 import multiprocessing.connection
@@ -105,6 +106,10 @@ class SubprocessCrashError(TranslationError):
 
 
 logger = logging.getLogger(__name__)
+
+
+# Ensure ORT sessions prefer GPU / parallel both in parent and subprocess
+patch_onnxruntime_for_gpu_parallel()
 
 
 def _translate_wrapper(
