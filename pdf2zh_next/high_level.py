@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from pdf2zh_next.ort_patch import patch_onnxruntime_for_gpu_parallel
 import logging.handlers
 import multiprocessing
 import multiprocessing.connection
@@ -28,6 +27,8 @@ from pdf2zh_next.utils import asynchronize
 
 
 # Custom exception classes for structured error handling
+import os
+
 class TranslationError(Exception):
     """Base class for all translation-related errors."""
 
@@ -106,10 +107,6 @@ class SubprocessCrashError(TranslationError):
 
 
 logger = logging.getLogger(__name__)
-
-
-# Ensure ORT sessions prefer GPU / parallel both in parent and subprocess
-patch_onnxruntime_for_gpu_parallel()
 
 
 def _translate_wrapper(
@@ -420,6 +417,103 @@ def _get_glossaries(settings: SettingsModel) -> list[Glossary] | None:
     return glossaries
 
 
+
+
+
+
+def _ort_available_providers():
+    try:
+        import onnxruntime as ort  # type: ignore
+        providers = list(ort.get_available_providers() or [])
+        version = getattr(ort, "__version__", "unknown")
+    except Exception as e:
+        providers = []
+        version = f"unavailable: {e}"
+    return {
+        "providers": providers,
+        "version": version,
+        "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
+    }
+
+
+def get_onnxruntime_diag() -> dict:
+    info = _ort_available_providers()
+    gpu_available = "CUDAExecutionProvider" in set(info["providers"])
+    info["gpu_available"] = gpu_available
+    return info
+
+
+def _plan_rapidocr_kwargs(gpu_available: bool, RapidOCRModel):
+    # 基于 RapidOCRModel 的构造签名动态适配
+    import inspect
+
+    kw = {}
+    try:
+        sig = inspect.signature(RapidOCRModel)
+        params = sig.parameters
+        if "providers" in params and gpu_available:
+            kw["providers"] = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        elif "use_cuda" in params:
+            kw["use_cuda"] = gpu_available
+        elif "use_gpu" in params:
+            kw["use_gpu"] = gpu_available
+        elif "gpu" in params:
+            kw["gpu"] = gpu_available
+        elif "device" in params and gpu_available:
+            kw["device"] = "cuda"
+        param_names = list(params.keys())
+    except Exception:
+        kw = {}
+        param_names = []
+    return kw, param_names
+
+def _make_rapidocr_model_gpu_first():
+    """
+    优先以 CUDA/GPU 构造 RapidOCR 表格检测模型；若不可用则回退到 CPU。
+    通过自省不同实现的构造参数，做到兼容且无额外强依赖。
+    """
+    try:
+        from babeldoc.docvision.table_detection.rapidocr import RapidOCRModel  # type: ignore
+    except Exception as e:
+        logger.debug(f"RapidOCRModel import failed, fallback to CPU. reason={e}")
+        return None
+
+    ort_info = get_onnxruntime_diag()
+    gpu_available = bool(ort_info.get("gpu_available"))
+    if gpu_available:
+        logger.info(
+            "ONNXRuntime CUDAExecutionProvider detected (ort=%s, providers=%s). Prefer CUDA for RapidOCR.",
+            ort_info.get("version"),
+            ort_info.get("providers"),
+        )
+    else:
+        logger.debug(
+            "CUDAExecutionProvider not available (ort=%s, providers=%s). Use CPU for RapidOCR.",
+            ort_info.get("version"),
+            ort_info.get("providers"),
+        )
+
+    # 规划 RapidOCRModel 的构造参数
+    try:
+        kwargs, param_names = _plan_rapidocr_kwargs(gpu_available, RapidOCRModel)
+        logger.debug("RapidOCRModel signature params=%s planned_kwargs=%s", param_names, kwargs)
+    except Exception as e:
+        logger.debug(f"Inspect RapidOCRModel signature failed, try default. reason={e}")
+        kwargs, param_names = {}, []
+
+    # 构造并带降级
+    try:
+        if kwargs:
+            return RapidOCRModel(**kwargs)
+        return RapidOCRModel()
+    except TypeError as e:
+        logger.debug(f"RapidOCRModel(**kwargs) failed ({kwargs}), retry default. reason={e}")
+        try:
+            return RapidOCRModel()
+        except Exception as e2:
+            logger.warning(f"RapidOCRModel() default construction failed, disable table model. reason={e2}")
+            return None
+
 def create_babeldoc_config(settings: SettingsModel, file: Path) -> BabelDOCConfig:
     if not isinstance(settings, SettingsModel):
         raise ValueError(f"{type(settings)} is not SettingsModel")
@@ -449,9 +543,8 @@ def create_babeldoc_config(settings: SettingsModel, file: Path) -> BabelDOCConfi
 
     table_model = None
     if settings.pdf.translate_table_text:
-        from babeldoc.docvision.table_detection.rapidocr import RapidOCRModel
-
-        table_model = RapidOCRModel()
+        # 优先使用 CUDA 以加速表格检测；若不可用则回退至 CPU
+        table_model = _make_rapidocr_model_gpu_first()
 
     babeldoc_config = BabelDOCConfig(
         input_file=file,
