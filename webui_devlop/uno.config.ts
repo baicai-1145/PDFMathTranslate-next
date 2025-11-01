@@ -17,12 +17,13 @@ export default defineConfig({
     }
   },
   shortcuts: {
+    // Keep layout properties only; colors come from CSS variables in theme.css
     'btn-primary':
-      'px-5 py-2 rounded-full font-semibold bg-primary text-white shadow-sm hover:bg-primary-light transition-colors duration-200',
+      'px-5 py-2 rounded-full font-semibold shadow-sm transition-colors duration-200',
     'btn-secondary':
-      'px-4 py-2 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors duration-200',
+      'px-4 py-2 rounded-full border transition-colors duration-200',
     'card':
-      'rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-200/60 dark:border-slate-700/60'
+      'rounded-xl shadow-sm border'
   },
   presets: [presetUno(), presetIcons()]
 });

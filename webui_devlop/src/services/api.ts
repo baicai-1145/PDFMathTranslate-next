@@ -2,8 +2,12 @@ import axios from 'axios';
 import type { TaskDetail, TaskSummary } from '@/types/task';
 import type { AuthResponse, UserProfile } from '@/types/user';
 
-// Use same-origin path for dev; real backend is configured via Vite proxy target
-const baseURL = import.meta.env.VITE_API_BASE || '/api';
+// 优先使用显式后端地址，其次兼容旧变量，最后退回到 dev 代理路径 /api
+// 与 webui 目录保持一致，避免环境变量名不一致导致误用本地代理
+const baseURL =
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_BASE ||
+  '/api';
 
 export const apiClient = axios.create({
   baseURL,
@@ -46,6 +50,16 @@ export async function downloadTaskResult(
     responseType: 'blob'
   });
   return data;
+}
+
+export async function downloadTaskResultBase64(
+  id: string,
+  mode: 'mono' | 'dual' | 'original' = 'mono'
+): Promise<{ filename: string; mime: string; data: string }>{
+  const { data } = await apiClient.get(`/tasks/${id}/result`, {
+    params: { mode, format: 'base64' }
+  });
+  return data as { filename: string; mime: string; data: string };
 }
 
 export async function downloadTaskArchive(id: string): Promise<Blob> {

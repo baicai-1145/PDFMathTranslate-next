@@ -4,14 +4,9 @@ import { ref, watchEffect } from 'vue';
 const THEME_STORAGE_KEY = 'pdfmathtranslate-theme';
 
 export const useThemeStore = defineStore('theme', () => {
-  const prefersDark =
-    typeof window !== 'undefined' &&
-    window.matchMedia &&
-    window.matchMedia('(prefers-color-scheme: dark)').matches;
-
+  // Default to light mode regardless of system preference (can be overridden by user toggle)
   const stored = typeof window !== 'undefined' ? localStorage.getItem(THEME_STORAGE_KEY) : null;
-
-  const isDark = ref(stored ? stored === 'dark' : prefersDark);
+  const isDark = ref(stored ? stored === 'dark' : false);
 
   watchEffect(() => {
     if (typeof document !== 'undefined') {

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { TaskDetail, TaskSummary, TaskStatus } from '@/types/task';
-import { createTask, downloadTaskResult, downloadTaskArchive, getTask, listTasks } from '@/services/api';
+import { createTask, downloadTaskResult, downloadTaskArchive, getTask, listTasks, downloadTaskResultBase64 } from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
 
 const POLL_INTERVAL = 8000;
@@ -18,6 +18,7 @@ export const useTaskStore = defineStore('tasks', () => {
   const errorMessage = ref<string | null>(null);
   const infoMessage = ref<string | null>(null);
   const previewUrls = ref<Record<string, string>>({});
+  const previewData = ref<Record<string, Uint8Array>>({});
   const authStore = useAuthStore();
   let pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -167,9 +168,18 @@ export const useTaskStore = defineStore('tasks', () => {
   async function ensurePreviewUrl(id: string, mode: ResultMode) {
     const key = previewKey(id, mode);
     if (!previewUrls.value[key]) {
-      let blob: Blob;
       try {
-        blob = await downloadTaskResult(id, mode, 'inline');
+        const resp = await downloadTaskResultBase64(id, mode);
+        // base64 -> Uint8Array
+        const b64 = resp.data;
+        const bin = atob(b64);
+        const len = bin.length;
+        const buf = new Uint8Array(len);
+        for (let i = 0; i < len; i += 1) buf[i] = bin.charCodeAt(i);
+        previewData.value[key] = buf;
+        // create object URL to keep现有 PdfViewer 兼容
+        const url = window.URL.createObjectURL(new Blob([buf], { type: 'application/pdf' }));
+        previewUrls.value[key] = url;
       } catch (error: any) {
         if (error?.response?.status === 401) {
           authStore.requireLogin('登录状态已过期，请重新登录。');
@@ -177,8 +187,6 @@ export const useTaskStore = defineStore('tasks', () => {
         }
         throw error;
       }
-      const url = window.URL.createObjectURL(blob);
-      previewUrls.value[key] = url;
       previewUrls.value = { ...previewUrls.value };
     }
     return previewUrls.value[key];
@@ -247,6 +255,7 @@ export const useTaskStore = defineStore('tasks', () => {
     errorMessage,
     infoMessage,
     previewUrls,
+    previewData,
     fetchTasks,
     fetchTaskDetail,
     submitTask,

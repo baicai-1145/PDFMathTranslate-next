@@ -19,7 +19,7 @@ from fastapi import Form
 from fastapi import HTTPException
 from fastapi import UploadFile
 from fastapi import status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import subprocess
@@ -661,6 +661,7 @@ async def download_result(
     task_id: str,
     mode: ResultMode = ResultMode.mono,
     disposition: str = "attachment",
+    format: str = "file",  # "file" | "base64"
     user: User = Depends(get_user_or_guest),
 ):
     try:
@@ -694,17 +695,26 @@ async def download_result(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File missing on server.",
         )
-    response = FileResponse(
-        path,
-        media_type="application/pdf",
-        filename=path.name,
-    )
-    # 明确设置 Content-Disposition，避免浏览器插件（如 IDM）因默认 attachment 而强制下载
-    if str(disposition).lower() == "inline":
-        response.headers["Content-Disposition"] = f'inline; filename="{path.name}"'
+    if str(format).lower() == "base64":
+        import base64
+        data = base64.b64encode(path.read_bytes()).decode("ascii")
+        return JSONResponse(
+            content={
+                "filename": path.name,
+                "mime": "application/pdf",
+                "data": data,
+            }
+        )
     else:
-        response.headers["Content-Disposition"] = f'attachment; filename="{path.name}"'
-    return response
+        response = FileResponse(
+            path,
+            media_type="application/pdf",
+            filename=path.name,
+        )
+        # For preview, avoid setting Content-Disposition so download managers won't hijack
+        if str(disposition).lower() != "inline":
+            response.headers["Content-Disposition"] = f'attachment; filename="{path.name}"'
+        return response
 
 
 @app.get("/api/tasks/{task_id}/archive")

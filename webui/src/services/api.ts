@@ -50,6 +50,16 @@ export async function downloadTaskResult(
   return data;
 }
 
+export async function downloadTaskResultBase64(
+  id: string,
+  mode: 'mono' | 'dual' | 'original' = 'mono'
+): Promise<{ filename: string; mime: string; data: string }>{
+  const { data } = await apiClient.get(`/tasks/${id}/result`, {
+    params: { mode, format: 'base64' }
+  });
+  return data as { filename: string; mime: string; data: string };
+}
+
 export async function downloadTaskArchive(id: string): Promise<Blob> {
   const { data } = await apiClient.get(`/tasks/${id}/archive`, {
     responseType: 'blob'
